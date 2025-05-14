@@ -100,6 +100,8 @@
     };
 
     let cButtonState = 'note'; // can be 'note' or 'S'
+    // New state for keyboard button
+    let keyboardButtonActive = false;
 
     const letterNamesByKey = {
       'C':  { 'Do': 'C',  'Re': 'D',  'Mi': 'E',  'Fa': 'F',  'So': 'G',  'La': 'A',  'Ti': 'B' },
@@ -163,6 +165,67 @@
       '6': 'Ti',
       '0': 'Fa' // For F5
     };
+
+    // Define primary key pairs for display in keyboard mode - CORRECTED
+    const keyboardDisplayPairs = {
+      // Upper keys (correct)
+      'Fa': 'f | ;', // For middle Fa
+      
+      // Lower keys (corrected)
+      'Mi': 'd | l', // For middle Mi
+      'Re': 's | k', // For middle Re
+      'Do': 'a | j', // For middle Do
+      'Ti': 'c | .', // For low Ti
+      'La': 'x | ,', // For low La
+      'So': 'z | m'  // For low So
+    };
+
+    // Additional keyboard display pairs for the distinct positions
+    const keyboardDisplayPairsWithPosition = {
+      // For the buttons in the array, the positions are mapped correctly based on the provided code
+      'mid_Fa': 'f | ;',  // For middle Fa
+      'mid_Mi': 'd | l',  // For middle Mi
+      'mid_Re': 's | k',  // For middle Re
+      'mid_Do': 'a | j',  // For middle Do
+      'low_Ti': 'c | .', // For low Ti
+      'low_La': 'x | ,', // For low La
+      'low_So': 'z | m', // For low So
+      
+      // Upper section keys
+      'high_So': 'q | u', // For high So
+      'high_La': 'w | i', // For high La
+      'high_Ti': 'e | o', // For high Ti
+      'higher_Do': '1 | 7', // For higher Do
+      'higher_Re': '2 | 8', // For higher Re
+      'higher_Mi': '3 | 9', // For higher Mi
+      'highest_Fa': '0'    // For highest Fa (F5)
+    };
+
+    // Map button keys to which note they represent (grouped by note position)
+    const keyGroups = {
+      'low_So': ['z', 'm'],
+      'low_La': ['x', ','],
+      'low_Ti': ['c', '.', 'h'],
+      'mid_Do': ['a', 'j', '/'],
+      'mid_Re': ['s', 'k'],
+      'mid_Mi': ['d', 'l'],
+      'mid_Fa': ['f', ';', 'y'],
+      'high_So': ['q', 'u'],
+      'high_La': ['w', 'i'],
+      'high_Ti': ['e', 'o', '6'],
+      'higher_Do': ['1', '7', 'p'],
+      'higher_Re': ['2', '8'],
+      'higher_Mi': ['3', '9'],
+      'highest_Fa': ['0']
+    };
+
+    // Map to find the position group for a key
+    const keyToPositionGroup = {};
+    for (const [group, keys] of Object.entries(keyGroups)) {
+      for (const key of keys) {
+        keyToPositionGroup[key] = group;
+      }
+    }
 
     const harmonics = 20;
     const real = new Float32Array(harmonics);
@@ -379,6 +442,9 @@
       }
       el.addEventListener('click', () => {
         cButtonState = (cButtonState === 'note') ? 'S' : 'note';
+        // Deactivate keyboard mode when note/S is toggled
+        keyboardButtonActive = false;
+        updateKeyboardButton();
         renderToggleButton();
         updateBoxNames();
       });
@@ -386,6 +452,9 @@
         if (e.key === ' ' || e.key === 'Enter') {
           e.preventDefault();
           cButtonState = (cButtonState === 'note') ? 'S' : 'note';
+          // Deactivate keyboard mode when note/S is toggled
+          keyboardButtonActive = false;
+          updateKeyboardButton();
           renderToggleButton();
           updateBoxNames();
         }
@@ -450,11 +519,27 @@
 
     function updateBoxNames() {
       const currentKey = keyNames[currentKeyIndex];
+      
       for (const btn of buttons) {
         const div = noteButtonRefs[btn.keys[0]];
         if (!div) continue;
         
-        if (cButtonState === 'note') {
+        // Keyboard mode display takes precedence over other modes
+        if (keyboardButtonActive) {
+          // Find position group for the current key
+          const keyPosition = keyToPositionGroup[btn.keys[0]];
+          
+          // Get the keyboard display text based on position
+          if (keyboardDisplayPairsWithPosition[keyPosition]) {
+            div.textContent = keyboardDisplayPairsWithPosition[keyPosition];
+          } else {
+            // Fallback to name-based mapping
+            div.textContent = keyboardDisplayPairs[btn.name] || '';
+          }
+          
+          div.style.color = 'white';
+        } 
+        else if (cButtonState === 'note') {
           div.textContent = buttonSolfegeNames[btn.keys[0]] || btn.name;
           
           // Get the note name to check if it's flat or sharp
@@ -469,7 +554,8 @@
           } else {
             div.style.color = 'white';
           }
-        } else {
+        } 
+        else {
           const solfege = buttonSolfegeNames[btn.keys[0]] || btn.name;
           const noteValue = letterNamesByKey[currentKey][solfege];
           div.textContent = noteValue || solfege;
@@ -493,11 +579,13 @@
     keyButton.tabIndex = 0;
     keyButton.setAttribute('aria-label', 'Key control');
     keyButton.innerHTML = '<div class="arrow" id="key-left">&#9664;</div><div id="key-name">C Major</div><div class="arrow" id="key-right">&#9654;</div>';
+    
     const waveButton = document.createElement('div');
     waveButton.className = 'control-area';
     waveButton.tabIndex = 0;
     waveButton.setAttribute('aria-label', 'Waveform control');
     waveButton.innerHTML = '<div class="arrow" id="left-arrow">&#9664;</div><div id="waveform-name">triangle</div><div class="arrow" id="right-arrow">&#9654;</div>';
+    
     const volumeControl = document.createElement('div');
     volumeControl.className = 'volume-control';
     volumeControl.innerHTML = `
@@ -508,6 +596,33 @@
     volumeControl.tabIndex = 0;
     volumeControl.setAttribute('aria-label', 'Volume control');
     volumeControl.style.outline = 'none';
+    
+    // Create new Keyboard button
+    const keyboardButton = document.createElement('div');
+    keyboardButton.className = 'control-area keyboard-button';
+    keyboardButton.tabIndex = 0;
+    keyboardButton.setAttribute('aria-label', 'Keyboard view toggle');
+    keyboardButton.textContent = 'Keyboard';
+    keyboardButton.id = 'keyboard-button';
+    
+    function updateKeyboardButton() {
+      if (keyboardButtonActive) {
+        keyboardButton.classList.add('active-control');
+        keyboardButton.style.background = '#007AFF';
+        keyboardButton.style.color = 'white';
+      } else {
+        keyboardButton.classList.remove('active-control');
+        keyboardButton.style.background = '';
+        keyboardButton.style.color = '';
+      }
+    }
+    
+    keyboardButton.addEventListener('click', () => {
+      keyboardButtonActive = !keyboardButtonActive;
+      updateKeyboardButton();
+      updateBoxNames();
+    });
+    
     volumeControl.addEventListener('focus', () => {
       volumeControl.style.boxShadow = '0 0 0 0.5vmin #007aff88';
     });
@@ -527,9 +642,12 @@
         e.preventDefault();
       }
     });
+    
     controlsBar.appendChild(keyButton);
     controlsBar.appendChild(waveButton);
     controlsBar.appendChild(volumeControl);
+    controlsBar.appendChild(keyboardButton); // Add keyboard button to controls
+    
     document.getElementById("key-left").onclick = () => {
       currentKeyIndex = (currentKeyIndex - 1 + keyNames.length) % keyNames.length;
       document.getElementById("key-name").textContent = keyNames[currentKeyIndex] + ' Major';
@@ -567,19 +685,24 @@
       controlMode = which;
       keyButton.classList.toggle('selected', which === 'key');
       waveButton.classList.toggle('selected', which === 'waveform');
+      keyboardButton.classList.toggle('selected', which === 'keyboard');
       volumeControl.style.boxShadow = which === 'volume' ? '0 0 0 0.5vmin #007aff88' : 'none';
       if (which === 'key') keyButton.focus();
       if (which === 'waveform') waveButton.focus();
+      if (which === 'keyboard') keyboardButton.focus();
       if (which === 'volume') volumeControl.focus();
     }
     keyButton.onclick = () => selectControl('key');
     keyButton.onfocus = () => selectControl('key');
     waveButton.onclick = () => selectControl('waveform');
     waveButton.onfocus = () => selectControl('waveform');
+    keyboardButton.onclick = () => selectControl('keyboard');
+    keyboardButton.onfocus = () => selectControl('keyboard');
     volumeControl.onclick = () => selectControl('volume');
     volumeControl.onfocus = () => selectControl('volume');
     keyButton.onblur = () => keyButton.classList.remove('selected');
     waveButton.onblur = () => waveButton.classList.remove('selected');
+    keyboardButton.onblur = () => keyboardButton.classList.remove('selected');
 
     // --- BUTTONS RENDERING ---
     buttons.forEach(btn => {
@@ -681,16 +804,21 @@
         if (div) {
           if (bgColors[btn.name]) div.style.backgroundColor = bgColors[btn.name];
           
-          // Update text color based on note value
-          const solfege = btn.name;
-          const noteValue = letterNamesByKey[currentKey][solfege];
-          
-          if (noteValue && noteAccidentalMap[noteValue] === 'flat') {
-            div.style.color = DARK_BLUE;
-          } else if (noteValue && noteAccidentalMap[noteValue] === 'sharp') {
-            div.style.color = DARK_RED;
+          // Only update text color if not in keyboard mode
+          if (!keyboardButtonActive) {
+            // Update text color based on note value
+            const solfege = btn.name;
+            const noteValue = letterNamesByKey[currentKey][solfege];
+            
+            if (noteValue && noteAccidentalMap[noteValue] === 'flat') {
+              div.style.color = DARK_BLUE;
+            } else if (noteValue && noteAccidentalMap[noteValue] === 'sharp') {
+              div.style.color = DARK_RED;
+            } else {
+              div.style.color = 'white';
+            }
           } else {
-            div.style.color = 'white';
+            div.style.color = 'white'; // Always white in keyboard mode
           }
         }
       });
@@ -721,6 +849,11 @@
         return;
       }
       if (document.activeElement === volumeControl && (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        return;
+      }
+      if (document.activeElement === keyboardButton && (e.key === ' ' || e.key === 'Enter')) {
+        keyboardButton.click();
         e.preventDefault();
         return;
       }
